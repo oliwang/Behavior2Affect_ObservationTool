@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/behavior-affect-observation-tool/static/css/main.2f63708e.css",
+    "main.js": "/behavior-affect-observation-tool/static/js/main.7d842f8b.js",
+    "index.html": "/behavior-affect-observation-tool/index.html",
+    "main.2f63708e.css.map": "/behavior-affect-observation-tool/static/css/main.2f63708e.css.map",
+    "main.7d842f8b.js.map": "/behavior-affect-observation-tool/static/js/main.7d842f8b.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.2f63708e.css",
+    "static/js/main.7d842f8b.js"
+  ]
+}
