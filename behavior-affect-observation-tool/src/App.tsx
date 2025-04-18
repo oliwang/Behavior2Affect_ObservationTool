@@ -8,6 +8,20 @@ interface LogEntry {
   label: string;
 }
 
+// Add RandomMark interface
+interface RandomMark {
+  id: string;
+  position: number; // 0-100 percentage along timeline
+  color: string;
+}
+
+// Add ToastMessage interface for feedback
+interface ToastMessage {
+  id: string;
+  text: string;
+  type: 'success' | 'error';
+}
+
 interface Label {
   id: string;
   text: string;
@@ -27,6 +41,7 @@ function App() {
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [startTime, setStartTime] = useState<number | null>(null);
+  const [activeDuration, setActiveDuration] = useState<number>(5); // Track the active timer duration
   
   // Labels state
   const [labels, setLabels] = useState<Label[]>([]);
@@ -41,6 +56,13 @@ function App() {
   // Log state
   const [log, setLog] = useState<LogEntry[]>([]);
   const [logText, setLogText] = useState<string>('');
+  
+  // Timeline state
+  const [randomMarks, setRandomMarks] = useState<RandomMark[]>([]);
+  const [showLogOnTimeline, setShowLogOnTimeline] = useState<boolean>(false);
+  
+  // Toast notification state
+  const [toastMessages, setToastMessages] = useState<ToastMessage[]>([]);
 
   // Load default labels
   useEffect(() => {
@@ -118,14 +140,35 @@ function App() {
       interval = setInterval(() => {
         setTimeRemaining(prev => Math.max(0, prev - 1));
       }, 1000);
-    } else if (timeRemaining === 0) {
+    } else if (timeRemaining === 0 && isRunning) {
+      // Timer has just reached zero
       setIsRunning(false);
+      
+      // Add a log entry for timer completion
+      if (startTime) {
+        const now = Date.now();
+        const timestamp = Math.floor(now / 1000);
+        const elapsedSeconds = Math.floor((now - startTime) / 1000);
+        
+        const minutes = Math.floor(elapsedSeconds / 60);
+        const seconds = elapsedSeconds % 60;
+        const timeSinceStart = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
+        const newEntry: LogEntry = {
+          timestamp,
+          timeSinceStart,
+          label: "Timer Completed"
+        };
+        
+        setLog(prev => [...prev, newEntry]);
+        showToast("Timer completed!", "success");
+      }
     }
     
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isRunning, timeRemaining]);
+  }, [isRunning, timeRemaining, startTime]);
 
   // Update log text whenever log changes
   useEffect(() => {
@@ -135,10 +178,10 @@ function App() {
     }
     
     // Add header
-    const header = 'timestamp,time_since_start,label\n';
+    const header = 'timestamp;time_since_start;label\n';
     
     const entries = log.map(entry => {
-      return `${entry.timestamp},${entry.timeSinceStart},${entry.label}`;
+      return `${entry.timestamp};${entry.timeSinceStart};${entry.label}`;
     }).join('\n');
     
     setLogText(header + entries);
@@ -204,17 +247,76 @@ function App() {
     setIsRunning(true);
     if (!startTime) {
       setStartTime(Date.now());
+      setActiveDuration(duration); // Store the active duration when timer starts
     }
     if (timeRemaining === 0) {
       setTimeRemaining(duration * 60);
     }
+    
+    // Log the start event
+    const now = Date.now();
+    const timestamp = Math.floor(now / 1000); // Unix timestamp
+    const elapsedSeconds = startTime ? Math.floor((now - startTime) / 1000) : 0;
+    
+    const minutes = Math.floor(elapsedSeconds / 60);
+    const seconds = elapsedSeconds % 60;
+    const timeSinceStart = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    
+    const newEntry: LogEntry = {
+      timestamp,
+      timeSinceStart,
+      label: "Timer Started"
+    };
+    
+    setLog(prev => [...prev, newEntry]);
+    
+    // Show success toast
+    showToast(`Timer started with ${duration} minute duration`);
   };
 
   const pauseCountdown = () => {
     setIsRunning(false);
+    
+    // Log the pause event
+    if (startTime) {
+      const now = Date.now();
+      const timestamp = Math.floor(now / 1000); // Unix timestamp
+      const elapsedSeconds = Math.floor((now - startTime) / 1000);
+      
+      const minutes = Math.floor(elapsedSeconds / 60);
+      const seconds = elapsedSeconds % 60;
+      const timeSinceStart = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      
+      const newEntry: LogEntry = {
+        timestamp,
+        timeSinceStart,
+        label: "Timer Paused"
+      };
+      
+      setLog(prev => [...prev, newEntry]);
+    }
   };
 
   const stopCountdown = () => {
+    // Log the stop event before resetting
+    if (startTime) {
+      const now = Date.now();
+      const timestamp = Math.floor(now / 1000); // Unix timestamp
+      const elapsedSeconds = Math.floor((now - startTime) / 1000);
+      
+      const minutes = Math.floor(elapsedSeconds / 60);
+      const seconds = elapsedSeconds % 60;
+      const timeSinceStart = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      
+      const newEntry: LogEntry = {
+        timestamp,
+        timeSinceStart,
+        label: "Timer Stopped"
+      };
+      
+      setLog(prev => [...prev, newEntry]);
+    }
+    
     setIsRunning(false);
     setTimeRemaining(0);
     setStartTime(null);
@@ -414,7 +516,10 @@ function App() {
       label: labelText
     };
     
-    setLog([...log, newEntry]);
+    setLog(prev => [...prev, newEntry]);
+    
+    // Show success toast
+    showToast(`Added: ${labelText} at ${timeSinceStart}`);
   };
 
   const handleLogTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -447,6 +552,63 @@ function App() {
     if (confirmClear) {
       setLog([]);
     }
+  };
+
+  // Timeline functions
+  const addRandomMarks = () => {
+    const colors = ['#FF5733'];
+    const newMarks: RandomMark[] = [];
+    
+    for (let i = 0; i < 3; i++) {
+      newMarks.push({
+        id: `random-${Date.now()}-${i}`,
+        position: Math.floor(Math.random() * 100),
+        color: colors[Math.floor(Math.random() * colors.length)]
+      });
+    }
+    
+    setRandomMarks([...randomMarks, ...newMarks]);
+  };
+  
+  const clearRandomMarks = () => {
+    setRandomMarks([]);
+  };
+  
+  const toggleShowLogOnTimeline = () => {
+    setShowLogOnTimeline(!showLogOnTimeline);
+  };
+
+  // Helper function to calculate position on timeline
+  const calculateTimelinePosition = (entry: LogEntry) => {
+    // if (!startTime) return 0;
+    
+    // Parse the time since start
+    const [minutesStr, secondsStr] = entry.timeSinceStart.split(':');
+    const minutes = parseInt(minutesStr, 10);
+    const seconds = parseInt(secondsStr, 10);
+    const entryTimeInSeconds = minutes * 60 + seconds;
+    
+    // Get the total duration from the ACTIVE timer setting, not the current duration
+    const totalDurationInSeconds = activeDuration * 60;
+
+    // console.log(entry, entryTimeInSeconds, totalDurationInSeconds);
+    
+    // Calculate position as percentage of the timeline width
+    // Make sure it's capped at 100%
+    return Math.min(100, Math.max(0, (entryTimeInSeconds / totalDurationInSeconds) * 100));
+  };
+
+  // Helper to show toast notifications
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    const id = `toast-${Date.now()}`;
+    const newMessage = { id, text: message, type };
+    
+    setToastMessages(prev => [...prev, newMessage]);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+      setToastMessages(prev => prev.filter(msg => msg.id !== id));
+    }, 3000);
   };
 
   return (
@@ -514,6 +676,133 @@ function App() {
           </div>
         </section>
 
+        <section className="log-section">
+          <h2>Log</h2>
+          <div className="log-controls">
+            <button onClick={copyLogToClipboard}>Copy to Clipboard</button>
+            <button onClick={clearLog} className="clear-button">Clear Log</button>
+          </div>
+          <div className="log-status">
+            {log.length === 0 ? (
+              <p className="empty-log-message">No observations recorded yet. Start the timer and click on labels to record observations.</p>
+            ) : (
+              <p className="log-info">{log.length} observations recorded</p>
+            )}
+          </div>
+          <textarea 
+            value={logText} 
+            onChange={handleLogTextChange} 
+            rows={10} 
+            className="log-textarea"
+            placeholder="Recorded observations will appear here"
+          />
+        </section>
+
+        {/* Toast notifications container */}
+        <div className="toast-container">
+          {toastMessages.map(toast => (
+            <div key={toast.id} className={`toast-message ${toast.type}`}>
+              {toast.text}
+            </div>
+          ))}
+        </div>
+
+        {/* Timeline visualization section */}
+        <section className="timeline-section full-width">
+          <h2>Timeline Visualization</h2>
+          <div className="timeline-controls">
+            <button onClick={addRandomMarks}>Add Random Marks</button>
+            <button onClick={clearRandomMarks}>Clear Random Marks</button>
+            <button 
+              onClick={toggleShowLogOnTimeline}
+              className={showLogOnTimeline ? "active-button" : ""}
+            >
+              {showLogOnTimeline ? "Hide Log Events" : "Visualize Log"}
+            </button>
+          </div>
+          
+          <div className="timeline-container">
+            <div className="timeline-track">
+              {/* Start and end markers */}
+              <div className="timeline-marker timeline-start">Start</div>
+              <div className="timeline-marker timeline-end">End ({activeDuration} min)</div>
+              
+              {/* Time markers - every minute */}
+              {Array.from({ length: activeDuration }).map((_, i) => (
+                <div 
+                  key={`marker-${i+1}`}
+                  className="timeline-time-marker"
+                  style={{ left: `${((i+1) / activeDuration) * 100}%` }}
+                >
+                  <div className="timeline-time-marker-tick"></div>
+                  <div className="timeline-time-marker-label">{i+1} min</div>
+                </div>
+              ))}
+              
+              {/* Log entry markers - only show if showLogOnTimeline is true */}
+              {showLogOnTimeline && log.length > 0 && log.map((entry, index) => {
+                const position = calculateTimelinePosition(entry);
+                // Add console log for debugging
+                // console.log(`Event: ${entry.label}, Time: ${entry.timeSinceStart}, Position: ${position}%`);
+                return (
+                  <div 
+                    key={`log-${index}`}
+                    className="timeline-log-mark"
+                    style={{ 
+                      left: `${position}%`,
+                      backgroundColor: entry.label.includes("Timer") ? "#FF9800" : "#2196F3"
+                    }}
+                  >
+                    <div className="timeline-tooltip">
+                      <div className="timeline-tooltip-time">{entry.timeSinceStart}</div>
+                      <div className="timeline-tooltip-label">{entry.label}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              
+              {/* Random markers */}
+              {randomMarks.map((mark) => (
+                <div 
+                  key={mark.id}
+                  className="timeline-random-mark"
+                  style={{ 
+                    left: `${mark.position}%`,
+                    backgroundColor: mark.color
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          
+          {/* Status text for timeline */}
+          <div className="timeline-status">
+            {showLogOnTimeline && log.length === 0 ? (
+              <p>No log events to display. Start the timer and add observations first.</p>
+            ) : showLogOnTimeline ? (
+              <p>{log.length} events displayed on timeline</p>
+            ) : (
+              <p>Click "Visualize Log" to display recorded events on the timeline</p>
+            )}
+          </div>
+          
+          {/* Add legend for the timeline */}
+          <div className="timeline-legend">
+            <div className="legend-item">
+              <div className="legend-color" style={{ backgroundColor: "#2196F3" }}></div>
+              <div>Log Events</div>
+            </div>
+            <div className="legend-item">
+              <div className="legend-color" style={{ backgroundColor: "#FF9800" }}></div>
+              <div>Timer Events</div>
+            </div>
+            <div className="legend-item">
+              <div className="legend-color" style={{ backgroundColor: "#FF5733", width: "8px", height: "18px", borderRadius: "0" }}></div>
+              <div>Random Marks</div>
+            </div>
+          </div>
+        </section>
+
         <section className="labels-section">
           <h2>Labels</h2>
           <div className="label-controls">
@@ -570,28 +859,6 @@ function App() {
               </div>
             ))}
           </div>
-        </section>
-
-        <section className="log-section">
-          <h2>Log</h2>
-          <div className="log-controls">
-            <button onClick={copyLogToClipboard}>Copy to Clipboard</button>
-            <button onClick={clearLog} className="clear-button">Clear Log</button>
-          </div>
-          <div className="log-status">
-            {log.length === 0 ? (
-              <p className="empty-log-message">No observations recorded yet. Start the timer and click on labels to record observations.</p>
-            ) : (
-              <p className="log-info">{log.length} observations recorded</p>
-            )}
-          </div>
-          <textarea 
-            value={logText} 
-            onChange={handleLogTextChange} 
-            rows={10} 
-            className="log-textarea"
-            placeholder="Recorded observations will appear here"
-          />
         </section>
       </main>
     </div>
